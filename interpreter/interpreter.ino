@@ -32,6 +32,7 @@ class StepperMotor {
     int PUL;  // Set this to high to make the motor move
     int DIR;  // HIGH = 1 = forward, LOW = 0 = backward
     int ms_del; // The amount of time in ms to wait between steps
+    float ratio;
     StepperOperation current_op;
     void drive_motor();
 };
@@ -65,6 +66,7 @@ StepperMotor base;
 // Declare servos
 Servo wrist1;   // Big servo in the wrist
 Servo wrist2;   // Smaller servo in the wrist
+Servo claw;     // Micro servo controlling the claw
 
 void read() {
   // This function reads a whole string of serial input rather than single characters. Adapted from stackoverflow.
@@ -103,24 +105,6 @@ int interpret(String input_str) {
     }
   } 
 
-  // For debug purposes, we have a procedure to set the ms_del of a motor
-  // In this case, the angle is actually a second identifier indicating the motor to be set
-  /*
-  if (identifier == 'd') {
-    int val = input_str.substring(5, -1).toInt();
-    Serial.write(val);
-    if (n == "s") {
-      shoulder1.ms_del = val;
-      shoulder2.ms_del = val;
-    } else if (n == "e") {
-      elbow.ms_del = val;
-    } else if (n == "b") {
-      base.ms_del = val;
-    }
-    return 1;
-  }
-  */
-
   int angle = n.toInt();
   int steps = (angle / phase_angle)/2;  // Calculate the necessary steps to achieve the necessary angle.
   int DIR = input_str.substring(input_str.length()-2, input_str.length()-1).toInt(); // Second to last segment of the instructions indicates the direction
@@ -130,22 +114,25 @@ int interpret(String input_str) {
     shoulder1.current_op.steps = 0;
     shoulder2.current_op.steps = 0;
 
-    shoulder1.current_op.max_steps = steps;
-    shoulder2.current_op.max_steps = steps;
+    shoulder1.current_op.max_steps = steps / shoulder1.ratio;
+    shoulder2.current_op.max_steps = steps / shoulder2.ratio;
 
     shoulder1.current_op.DIR = DIR;
     shoulder2.current_op.DIR = DIR;      
   } else if (identifier == 'e') { // Elbow
     elbow.current_op.steps = 0;
 
-    elbow.current_op.max_steps = steps;
+    elbow.current_op.max_steps = steps / elbow.ratio;
 
     elbow.current_op.DIR = DIR;
   } else if (identifier == 'b') {
     base.current_op.steps = 0;
-    base.current_op.max_steps = steps;
+
+    base.current_op.max_steps = steps / base.ratio;
+
     base.current_op.DIR = DIR;
   } else if (identifier == 'w') { // Big wrist servo
+    wrist1.write(angle);
   } else if (identifier == 'r') { // Small wrist servo
     // TODO: More servo code
   }
@@ -157,8 +144,8 @@ void setup() {
 
   Serial.begin(9600); // 9600 baud is the baudrate of the rfcomm0 port on my laptop. Also works for standard usb connections so we vibing.
 
-  // Define pins 6 to 13 as output
-  for (int i = 6; i <= 13; i++) {
+  // Define pins 3 to 13 as output
+  for (int i = 3; i <= 13; i++) {
     pinMode(i, OUTPUT);
   } 
 
@@ -168,24 +155,30 @@ void setup() {
   shoulder1.PUL = 13;
   shoulder1.DIR = 12;
   shoulder1.ms_del = 10000;
+  shoulder1.ratio = 16/120;
 
   // Right shoulder stepper, 34mm 
   shoulder2.PUL = 11;
   shoulder2.DIR = 10;
-  shoulder2.ms_del = 5000;
+  shoulder2.ms_del = 10000;
+  shoulder1.ratio = 16/120;
   
   // Base rotating stepper, 40mm
   base.PUL = 9;
   base.DIR = 8;
   base.ms_del = 5000;
+  base.ratio = 1/20;
   
   // Pancake stepper in the elbow, 24mm
   elbow.PUL = 7;
   elbow.DIR = 6;
   elbow.ms_del = 5000;
+  elbow.ratio = 16/88;
 
   // Initialise servos
-
+  wrist1.attach(5);
+  wrist2.attach(4);
+  claw.attach(3);
 }
 
 void loop() {
