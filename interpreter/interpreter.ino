@@ -1,5 +1,16 @@
 // This code just interprets instructions from the GUI and drives the motors according to them. All the heavy lifting gets done at Python level.
 
+/*
+Current challenge is timing. Given how we control stepper motors in sync, the time elapsed for each loop is extremely important
+Largest time losses are reading analog ports and sending data over serial
+digitalRead() cuts reading time from >100us (using analogRead) to <5us, which is excellent
+Serial data sendtimes depend on the baudrate. 9600 is the limit for bluetooth, which is far too slow. Will likely disable all feedback from the arduino over bluetooth.
+The greater the elapsed time the less accurate the results will be as it increases the error in the pulse timings.
+Ideally we want it to be as low as 50ms
+We don't need to send serial data on every loop, so we can cut down on that. Will result in small hiccups if we send data in motion.
+Serial reading is also slow, but we do it very rarely and almost never in motion.
+*/
+
 #include <Servo.h>
 
 const byte numChars = 32;       // 32 character limit, shouldn't be a problem. Will refine down later.
@@ -47,9 +58,9 @@ void StepperMotor::drive_motor() {
     if (current_op.current_del <= dt * 2) {
       digitalWrite(DIR, current_op.DIR);   // Set Direction
       digitalWrite(PUL,HIGH);             // Activate motor
-    } else if (current_op.current_del > ms_del - 50 && current_op.current_del < ms_del + 50) {  // Wait ms_del microseconds. Average dt is between 18 and 30us, so we have a safety range here so we never skip a step (hopefully)
+    } else if (current_op.current_del > ms_del - 500 && current_op.current_del < ms_del + 500) {  // Wait ms_del microseconds. Average dt is between 18 and 30us, so we have a safety range here so we never skip a step (hopefully)
       digitalWrite(PUL,LOW);              // Stop motor
-    } else if (current_op.current_del > (ms_del * 2) - 50 && current_op.current_del < (ms_del * 2) + 50) { // Wait another ms_del microseconds
+    } else if (current_op.current_del > (ms_del * 2) - 500 && current_op.current_del < (ms_del * 2) + 500) { // Wait another ms_del microseconds
       current_op.current_del = 0;
       current_op.steps ++; 
     }
@@ -114,27 +125,27 @@ int interpret(String input_str) {
     shoulder1.current_op.steps = 0;
     shoulder2.current_op.steps = 0;
 
-    shoulder1.current_op.max_steps = steps / shoulder1.ratio;
-    shoulder2.current_op.max_steps = steps / shoulder2.ratio;
+    shoulder1.current_op.max_steps = steps * 8;
+    shoulder2.current_op.max_steps = steps * 8;
 
     shoulder1.current_op.DIR = DIR;
     shoulder2.current_op.DIR = DIR;      
   } else if (identifier == 'e') { // Elbow
     elbow.current_op.steps = 0;
 
-    elbow.current_op.max_steps = steps / elbow.ratio;
+    elbow.current_op.max_steps = steps * 5;
 
     elbow.current_op.DIR = DIR;
   } else if (identifier == 'b') {
     base.current_op.steps = 0;
 
-    base.current_op.max_steps = steps / base.ratio;
+    base.current_op.max_steps = steps * 5;
 
     base.current_op.DIR = DIR;
   } else if (identifier == 'w') { // Big wrist servo
     wrist1.write(angle);
   } else if (identifier == 'r') { // Small wrist servo
-    // TODO: More servo code
+    wrist2.write(angle);
   }
   return 1;
 }
@@ -142,12 +153,24 @@ int interpret(String input_str) {
 void setup() {
   // put your setup code here, to run once:
 
-  Serial.begin(9600); // 9600 baud is the baudrate of the rfcomm0 port on my laptop. Also works for standard usb connections so we vibing.
+  // Baudrates:
+  //  9600 - default. 6400ms to send data. bluetooth supported
+  //  57600 - 800ms to send data
+  //  115200 - 400ms to send data
+  // We want less than 50ms so sending data is probably impossible
+  Serial.begin(9600); 
 
   // Define pins 3 to 13 as output
   for (int i = 3; i <= 13; i++) {
     pinMode(i, OUTPUT);
   } 
+
+  pinMode(A0, INPUT_PULLUP);
+  pinMode(A1, INPUT_PULLUP);
+  pinMode(A2, INPUT_PULLUP);
+  pinMode(A3, INPUT_PULLUP);
+  pinMode(A4, INPUT_PULLUP);
+  pinMode(A5, INPUT_PULLUP);
 
   // Initialise stepper motors
 
@@ -155,7 +178,7 @@ void setup() {
   shoulder1.PUL = 13;
   shoulder1.DIR = 12;
   shoulder1.ms_del = 10000;
-  shoulder1.ratio = 16/120;
+  shoulder1.ratio = 16/120; // 1:7.5
 
   // Right shoulder stepper, 34mm 
   shoulder2.PUL = 11;
@@ -173,7 +196,7 @@ void setup() {
   elbow.PUL = 7;
   elbow.DIR = 6;
   elbow.ms_del = 5000;
-  elbow.ratio = 16/88;
+  elbow.ratio = 16/88; // 1: 5.5
 
   // Initialise servos
   wrist1.attach(5);
@@ -181,6 +204,7 @@ void setup() {
   claw.attach(3);
 }
 
+int n;
 void loop() {
   // Calculate time interval between loops
   prev_ms = current_ms;
@@ -188,10 +212,23 @@ void loop() {
   dt = current_ms - prev_ms;
 
   read(); // Read serial data from gui.
-  if (newData==true) {
-    Serial.println(receivedChars);
+  if (newData) {
     interpret(receivedChars);
     newData = false;
+  }
+
+  if (digitalRead(A0) == 0 && shoulder1.current_op.DIR == 1) {
+    shoulder1.current_op.steps = 0;
+    shoulder1.current_op.max_steps = 0;
+    shoulder1.current_op.current_del = 0;
+    shoulder2.current_op.steps = 0;
+    shoulder2.current_op.max_steps = 0;
+    shoulder2.current_op.current_del = 0;
+  }
+  if (digitalRead(A1) == 0 && elbow.current_op.DIR == 1) {
+    shoulder1.current_op.steps = 0;
+    shoulder1.current_op.max_steps = 0;
+    shoulder1.current_op.current_del = 0;
   }
 
   shoulder1.drive_motor();

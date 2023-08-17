@@ -1,0 +1,7 @@
+image {
+    -gtk-icon-palette: success green, warning #fc3, error magenta;
+}
+
+button {
+    -gtk-icon-palette: success green, warning #fc3, error magenta;
+}
