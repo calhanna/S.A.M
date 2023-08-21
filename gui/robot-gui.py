@@ -55,13 +55,18 @@ class Window(Gtk.Window):
 
         main_box.pack_start(row, True, True, 0)
 
-        self.create_arrow_block(lcol, "<big>Shoulder Controls</big>", "s")
-        self.create_arrow_block(lcol, "<big>Elbow Controls</big>", "e", invert=True)
-        self.create_arrow_block(lcol, "<big>Base Controls</big>", "b")
+        sh_box = self.create_control_block(lcol, "Shoulder Controls")
+        e_box = self.create_control_block(lcol, "Elbow Controls")
+        b_box = self.create_control_block(lcol, "Base Controls")
+        w_box = self.create_control_block(rcol, "Wrist Controls")
+
+        self.create_arrow_block(sh_box, "s")
+        self.create_arrow_block(e_box, "e", invert=True)
+        self.create_arrow_block(b_box, "b")
 
         #self.create_input_block(rcol, "<big>Wrist Control</big>", "w")
-        self.create_slider_block(rcol, "<big>Wrist Pitch</big>", "w", 0, 180)
-        self.create_slider_block(rcol, "<big>Wrist Yaw</big>", "r", 0, 180)
+        self.create_slider_block(w_box, "w", 0, 180, label_text="<big>Pitch</big>")
+        self.create_slider_block(w_box, "r", 0, 180, label_text="<big>Yaw</big>", )
 
         self.ser = self.get_serial_connection()
         self.limits = {'s': False, 'e': False, 'b': False}
@@ -122,16 +127,22 @@ class Window(Gtk.Window):
         print("USB connection failed.")
         self.usb_icon.set_opacity(0.5)
 
-    def create_arrow_block(self, col, label_text, id, invert=False):
-        col.pack_start(Gtk.Label(label=label_text, use_markup=True), False, True, 10)
+    def create_control_block(self, col, label_text):
+        col.pack_start(Gtk.Label(label="<big>%s</big>" % label_text, use_markup=True), False, True, 10)
 
-        control_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        control_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         col.pack_start(control_box, False, True, 10)
+
+        return control_box
+
+    def create_arrow_block(self, control_box, id, invert=False):
+        container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        control_box.pack_start(container, False, True, 10)
 
         left_button = Gtk.Button(label="<")
         right_button = Gtk.Button(label=">")
-        control_box.pack_start(left_button, True, True, 0)
-        control_box.pack_end(right_button, True, True, 0)
+        container.pack_start(left_button, True, True, 0)
+        container.pack_end(right_button, True, True, 0)
 
         if not invert: n1, n2 = 1, 0
         else: n1, n2 = 0, 1
@@ -153,11 +164,13 @@ class Window(Gtk.Window):
 
         go_button.connect("clicked", self.send_command, id, input_box, 0)
 
-    def create_slider_block(self, col, label_text, id, min, max):
-        col.pack_start(Gtk.Label(label=label_text, use_markup=True), False, True, 10)
-
+    def create_slider_block(self, col, id, min, max, label_text=None):
         control_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        col.pack_start(control_box, False, True, 10)
+        col.pack_start(control_box, False, True, 0)
+
+        if label_text is not None:
+            label = Gtk.Label(label=label_text, use_markup=True)
+            control_box.pack_start(label, False, False, 0)
 
         adj = Gtk.Adjustment(value=90, lower=0, upper=180, step_increment=5, page_increment=0)
         slider = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=adj)
@@ -165,7 +178,7 @@ class Window(Gtk.Window):
         slider.set_hexpand(True)
         slider.connect("value_changed", self.send_command, id, slider)
 
-        control_box.pack_start(slider, False, True, 0)
+        control_box.pack_start(slider, True, True, 0)
 
 
 win = Window()
