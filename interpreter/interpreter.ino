@@ -10,6 +10,7 @@ boolean newData = false;  // When we finish reading a string of instructions, th
 // These variables are related to the serial reading.
 static byte ndx = 0;  // Number of recieved characters
 char endMarker = 'n'; // This character goes at the end of an instruction string
+char hardEndMarker = 'N'; // Used for scripting 
 char rc;              // Currently recieved character
 
 const float phase_angle = 0.9; // All stepper motors in this design have an angle of 1.8 degrees between steps.
@@ -17,6 +18,8 @@ const float phase_angle = 0.9; // All stepper motors in this design have an angl
 int current_ms;
 int prev_ms;
 int dt;
+
+bool notifyAtEnd;
 
 // We want different parts of the robot to move at the same time. Thus, we keep track of each operation using one of these objects, which keeps track of how many steps it's motor has to move
 class StepperOperation {
@@ -49,6 +52,10 @@ void StepperMotor::new_op(int goal_steps, int dir) {
 void StepperMotor::clear_op() {
   current_op.steps = 0;
   current_op.max_steps = 0;
+  if (notifyAtEnd) {
+    Serial.write('0');
+    notifyAtEnd = false;
+  }
 }
 
 void StepperMotor::drive_motor() {
@@ -70,7 +77,9 @@ void StepperMotor::drive_motor() {
         current_op.steps ++; 
       }
       current_op.current_del += dt;
-    }
+    } else if (current_op.max_steps != 0) {
+      clear_op();
+    } 
   //} else {
   //  clear_op();
   //}
@@ -92,7 +101,7 @@ void read() {
   if (Serial.available() > 0 && newData == false) {
     rc = Serial.read();               // Fetch latest character
 
-    if (rc != endMarker) {
+    if (rc != endMarker && rc != hardEndMarker) {
       receivedChars[ndx] = rc;        
       ndx++;
       if (ndx >= numChars) {
@@ -100,7 +109,8 @@ void read() {
       }
     }
     else {
-      receivedChars[ndx] = '\0';      // Terminate the string
+      receivedChars[ndx] = 'N';
+      receivedChars[ndx + 1] = '\0';      // Terminate the string
       ndx = 0;
       newData = true;                 // NEW DATA
     }
@@ -110,6 +120,12 @@ void read() {
 int interpret(String input_str) {
   // Takes the output string from the GUI program and interprets it as instructions
   // Then, creates a new StepperOperation and assigns it to the relevant StepperMotor
+
+  if (input_str[input_str.length()-1] == 'N') {
+    input_str = input_str.substring(0, input_str.length()-2);
+    notifyAtEnd = true;
+  }
+
   char identifier = input_str[0]; // Single character at the start of the instructions that indicates the motor / pair of motors / stepper to drive
 
   // Isolate the angle, the second segment, from the instructions by looping through until we find an _
