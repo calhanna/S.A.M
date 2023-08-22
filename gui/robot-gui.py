@@ -61,8 +61,7 @@ class Window(Gtk.Window):
 
         self.debug_warning = Gtk.Label()
         self.debug_warning.set_markup("<span size='x-large' foreground='red'> !  </span>")
-        self.debug_warning.set_opacity(0)
-        self.debug_warning.set_tooltip_text("Currently using debug serial. This is a fake connection and does not indicate connectivity to the robot. No data will be sent.")
+        self.display_warning(False)
         top_bar.pack_start(self.debug_warning)
 
         bt_button.connect("clicked", self.get_bt_connection)
@@ -136,7 +135,7 @@ class Window(Gtk.Window):
 
         self.reset_button = Gtk.Button(label="RESET")
         self.reset_button.set_tooltip_text("Resets the robot back to it's default position. Keycode: Z")
-        main_box.pack_start(self.reset_button, True, False, 0)
+        main_box.pack_end(self.reset_button, False, False, 0)
         self.reset_button.set_vexpand(False)
         self.reset_button.connect("clicked", self.reset)
 
@@ -154,6 +153,13 @@ class Window(Gtk.Window):
         """ Sends a simple signal to trigger the reset callibration process """
         self.ser.write(b'Zn')
         self.update_history('Zn')
+
+    def display_warning(self, state):
+        self.debug_warning.set_opacity(int(state))
+        if state:
+            self.debug_warning.set_tooltip_text("Currently using debug serial. This is a fake connection and does not indicate connectivity to the robot. No data will be sent.")
+        else:
+            self.debug_warning.set_tooltip_text(None)
 
     def sensitivity(self, state):
         """ Disables/Undisables the controls """
@@ -240,6 +246,7 @@ class Window(Gtk.Window):
             Gtk.ResponseType.OK,
         )
 
+        # Custom file filter that only allows text files with the suffix .sams
         filter_sams = Gtk.FileFilter()
         filter_sams.set_name("SAMScript Files")
         filter_sams.add_mime_type("text/plain")
@@ -258,6 +265,8 @@ class Window(Gtk.Window):
         return response, filename
 
     def save_script(self, button, *data):
+        """ Converts selected history to text and saves it to a .sams file. """
+
         history = []
 
         # Adapted from StackOverflow. Gets the current selection. No idea why it has to be this complicated
@@ -269,19 +278,21 @@ class Window(Gtk.Window):
             history.append(value)
 
         if len(history) <= 1:
+            # Haven't selected anything, or only selected a single action, so we save the whole history
             history = [x[0] for x in list(self.history)]
 
-        response, filename = self.filechooser_dialog(Gtk.FileChooserAction.SAVE)
+        response, filename = self.filechooser_dialog(Gtk.FileChooserAction.SAVE)    # Throw up the file chooser dialog
         if response == Gtk.ResponseType.OK:
             file = open(filename, "w")
-            for command in history:
+            for command in history[:-1]:
                 file.write(command.replace("n", "N"))
-            file.write('n')
+            file.write(history[-1])
         elif response == Gtk.ResponseType.CANCEL:
             print("Cancel clicked")
 
     def send_command(self, button, *data):
-        #ser = get_serial_connection()
+        """ Sends general commands over the serial connection """
+
         if self.ser is not None:
             if data[0] in "wr":
                 processed_data = (data[0], int(data[1].get_value()), 0)
@@ -293,12 +304,6 @@ class Window(Gtk.Window):
             self.ser.write(command.encode())
         else:
             print("Failed to send command, please check usb/bluetooth connection and try again")
-
-    def read_limits(self):
-        c = self.ser.read(1).decode('ascii')
-        if c in self.limits.keys():
-            self.limits[c] = True
-            print(self.limits)
 
     def get_serial_connection(self):
         """ Fetches the serial connection through bluetooth or USB """
@@ -323,22 +328,27 @@ class Window(Gtk.Window):
         return ser
 
     def get_bt_connection(self, button):
+        """ BT Button function, attempts to create bluetooth connection """
+
         try:
             self.ser = serial.Serial("/dev/rfcomm0")
             self.bt_icon.set_opacity(1)
             self.usb_icon.set_opacity(0.5)
             self.sensitivity(True)
+            self.display_warning(False)
         except serial.serialutil.SerialException:
             print("Bluetooth connection failed. Please check connection and try again. ")
             self.sensitivity(False)
 
     def get_usb_connection(self, button, event):
+        """ USB button function. Attempts to create a USB connection, or if button is shift clicked, create a fake debug connection"""
+
         if event.get_state() & Gdk.ModifierType.SHIFT_MASK:
             self.ser = DummySerial()
             self.usb_icon.set_opacity(1)
             self.bt_icon.set_opacity(0.5)
             self.sensitivity(True)
-            self.debug_warning.set_opacity(1)
+            self.display_warning(True)
             print("Using debug serial. THIS WILL NOT SEND DATA TO THE ROBOT! ")
         else:
             for n in range(0, 5):
@@ -347,12 +357,14 @@ class Window(Gtk.Window):
                     self.usb_icon.set_opacity(1)
                     self.bt_icon.set_opacity(0.5)
                     self.sensitivity(True)
+                    self.display_warning(False)
                     return 1
                 except serial.serialutil.SerialException:
                     pass
             print("USB connection failed.")
             self.usb_icon.set_opacity(0.5)
             self.sensitivity(False)
+            self.display_warning(False)
 
     def create_control_block(self, col, label_text):
         col.pack_start(Gtk.Label(label="<big>%s</big>" % label_text, use_markup=True), False, True, 10)

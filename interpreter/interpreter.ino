@@ -117,6 +117,14 @@ void read() {
   }
 }
 
+void grab() {
+  if (claw.read() > 0) {
+    claw.write(0);
+  } else {
+    claw.write(180);
+  }
+}
+
 int interpret(String input_str) {
   // Takes the output string from the GUI program and interprets it as instructions
   // Then, creates a new StepperOperation and assigns it to the relevant StepperMotor
@@ -124,6 +132,13 @@ int interpret(String input_str) {
   if (input_str[input_str.length()-1] == 'N') {
     input_str = input_str.substring(0, input_str.length()-2);
     notifyAtEnd = true;
+  }
+
+  // Handle single character commands
+  if (input_str[0] == 'Z') {
+    reset();
+  } else if (input_str[0] == 'g') {
+    grab();
   }
 
   char identifier = input_str[0]; // Single character at the start of the instructions that indicates the motor / pair of motors / stepper to drive
@@ -160,6 +175,26 @@ int interpret(String input_str) {
     claw.write(180);
   }
   return 1;
+}
+
+void reset() {
+  while (digitalRead(shoulder1.limit_pin) || digitalRead(elbow.limit_pin)) {
+    if (digitalRead(shoulder1.limit_pin)) {
+      digitalWrite(shoulder1.DIR, HIGH);
+      digitalWrite(shoulder1.PUL, HIGH);
+      digitalWrite(shoulder2.DIR, HIGH);
+      digitalWrite(shoulder2.PUL, HIGH);
+    }
+    if (digitalRead(elbow.limit_pin)) {
+      digitalWrite(elbow.DIR, HIGH);
+      digitalWrite(elbow.PUL, HIGH);
+    }
+    delayMicroseconds(shoulder1.ms_del);
+    digitalWrite(elbow.PUL, LOW);
+    digitalWrite(shoulder1.PUL, LOW);
+    digitalWrite(shoulder2.PUL, LOW);
+  }
+  // TODO: Add base here when the base limit switch actually exists
 }
 
 void setup() {
