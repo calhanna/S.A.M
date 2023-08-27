@@ -10,7 +10,7 @@
 import gi, serial, time, threading, random, sys
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, GLib, Gio, Gdk
+from gi.repository import Gtk, GLib, Gio, Gdk, GdkPixbuf
 
 MODULE_ADDRESS = "98:D3:71:FD:42:23"
 
@@ -40,6 +40,10 @@ class Window(Gtk.Window):
         super().__init__(title="S.A.M Interface")
         self.set_default_size(800, 600)
 
+        # Set icon
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale("./gui/icon.svg", -1, 128, True)
+        self.set_icon(pixbuf)
+
         main_box = Gtk.Box(spacing=6, orientation=Gtk.Orientation.VERTICAL)
         self.add(main_box)
 
@@ -54,10 +58,12 @@ class Window(Gtk.Window):
         bt_button = Gtk.Button()
         bt_button.set_image(self.bt_icon)
         top_bar.pack_start(bt_button)
+        bt_button.set_tooltip_text("Connect to S.A.M through Bluetooth")
 
         usb_button = Gtk.Button()
         usb_button.set_image(self.usb_icon)
         top_bar.pack_start(usb_button)
+        usb_button.set_tooltip_text("Connect to S.A.M through USB")
 
         self.debug_warning = Gtk.Label()
         self.debug_warning.set_markup("<span size='x-large' foreground='red'> !  </span>")
@@ -66,6 +72,7 @@ class Window(Gtk.Window):
 
         bt_button.connect("clicked", self.get_bt_connection)
         usb_button.connect("button-release-event", self.get_usb_connection)
+        usb_button.connect("key-release-event", self.get_usb_connection)
 
         self.row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
         lcol = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -94,7 +101,7 @@ class Window(Gtk.Window):
         self.create_slider_block(servo_grid, "w", 0, 180, "<big>Pitch</big>", 0)
         self.create_slider_block(servo_grid, "r", 0, 180, "<big>Roll</big>", 1)
 
-        claw_button = Gtk.ToggleButton(label="Grab")
+        claw_button = Gtk.ToggleButton(label="Grab", tooltip_text="Toggle the robotic claw. ")
         claw_button.connect("toggled", self.grab)
         rcol.pack_start(claw_button, False, False, 20)
 
@@ -343,6 +350,10 @@ class Window(Gtk.Window):
     def get_usb_connection(self, button, event):
         """ USB button function. Attempts to create a USB connection, or if button is shift clicked, create a fake debug connection"""
 
+        if hasattr(event, 'keyval'):
+            if Gdk.keyval_name(event.keyval) != "space":
+                return 1
+
         if event.get_state() & Gdk.ModifierType.SHIFT_MASK:
             self.ser = DummySerial()
             self.usb_icon.set_opacity(1)
@@ -378,8 +389,8 @@ class Window(Gtk.Window):
         container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         control_box.pack_start(container, False, True, 10)
 
-        left_button = Gtk.Button(label="<")
-        right_button = Gtk.Button(label=">")
+        left_button = Gtk.Button(label="<", tooltip_text="Move 10 degrees towards the limit switch. ")
+        right_button = Gtk.Button(label=">", tooltip_text="Move 10 degrees away from the limit switch. ")
         container.pack_start(left_button, True, True, 0)
         container.pack_end(right_button, True, True, 0)
 
@@ -428,7 +439,7 @@ class Window(Gtk.Window):
         
         grid.attach(slider, 0, 0, 8, 1)
 
-        button = Gtk.Button(label="Go")
+        button = Gtk.Button(label="Go", tooltip_text="Move by the specified angle. ")
         grid.attach_next_to(button, slider, Gtk.PositionType.RIGHT, 2, 1)
 
         button.connect("clicked", self.precise_movement, id, slider)
@@ -448,7 +459,7 @@ class Window(Gtk.Window):
         if exception_type == serial.SerialException:
             self.get_serial_connection()
         else:
-            print(traceback)
+            print(value)
 
 win = Window()
 win.connect("destroy", Gtk.main_quit)
