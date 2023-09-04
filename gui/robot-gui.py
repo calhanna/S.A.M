@@ -7,7 +7,7 @@
     s_90_1_n = Move shoulder forward 90 degrees
 """
 
-import gi, serial, time, threading, random, sys
+import gi, serial, time, threading, random, sys, inspect
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib, Gio, Gdk, GdkPixbuf
@@ -29,7 +29,7 @@ class DummySerial():
         print(data)
 
     def read(self, length):
-        if random.randint(1, 1000000) == 1:
+        if random.randint(1, 100000) == 1:
             return(b'0')
         else:
             return(b'1')
@@ -174,16 +174,19 @@ class Window(Gtk.Window):
         self.row.set_sensitive(state)
         self.reset_button.set_sensitive(state)
 
-    def execute_script(self, script, dialog):
+    def execute_script(self, script, dialog, progress):
         """ Executes the script file in a seperate thread """
 
         global dialog_exists
+        length = len(script)
         while script and dialog_exists:
+            print((length - len(script))/length)
+            GLib.idle_add(progress.set_fraction, (length - len(script))/length)
             if self.ser.read(1) == b'0':
                 self.ser.write(script[0].encode())
                 script.pop(0)
         if dialog_exists:
-            dialog.destroy()
+            GLib.idle_add(dialog.destroy)
             dialog_exists = False
     
     def execute_from_file(self, button, *data):
@@ -197,31 +200,47 @@ class Window(Gtk.Window):
             script = open(filename, "r").read().split("N")
             script = [x + 'N' for x in script[:-1]] + ['n']
             
-            dialog = Gtk.MessageDialog(
+            dialog = Gtk.Dialog(
                 transient_for=self,
                 flags=0,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.NONE,
-                text="Executing...",
+                #message_type=Gtk.MessageType.INFO,
+                #buttons=Gtk.ButtonsType.NONE,
+                #text="Executing...",
             )
-            dialog.format_secondary_text(
-                "Executing script from file..."
-            )
+            dialog.set_default_size(250, 50)
 
-            dialog.add_button(Gtk.STOCK_CANCEL, 0)
+            box = dialog.get_content_area()
+            
+            box.pack_start(Gtk.Label(label="<big>Executing...</big>", use_markup = True), False, True, 20)
+
+            progress = Gtk.ProgressBar(text="Executing")
+            box.pack_start(progress, True, True, 0)
+
+            def close_dialog(button):
+                global dialog_exists
+                dialog_exists = False
+                dialog.destroy()
+
+            cancel_button = Gtk.Button()
+            image = Gtk.Image.new_from_stock(Gtk.STOCK_CANCEL, Gtk.IconSize.BUTTON)
+            cancel_button.set_image(image)
+            cancel_button.connect("clicked", close_dialog)
+            box.pack_start(cancel_button, False, True, 5)
+
+            dialog.show_all()
 
             dialog_exists = True
 
             # Start execution in seperate thread
-            thread = threading.Thread(target=self.execute_script, args=[script, dialog])
+            thread = threading.Thread(target=self.execute_script, args=[script, dialog, progress])
             thread.daemon = True
             thread.start()
 
             # Display dialog
-            response = dialog.run()
-            if response == 0:
-                dialog_exists = False
-                dialog.destroy()
+            dialog.run()
+            #if response == 0:
+            #    dialog_exists = False
+            #    dialog.destroy()
 
     def update_history(self, command):
         self.history.append([command])
