@@ -12,7 +12,7 @@ import gi, serial, time, threading, random, sys, inspect
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib, Gio, Gdk, GdkPixbuf
 
-MODULE_ADDRESS = "98:D3:71:FD:42:23"
+MODULE_ADDRESS = "00:22:01:00:05:15"
 
 class ListBoxRowWithData(Gtk.ListBoxRow):
     def __init__(self, data):
