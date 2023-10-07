@@ -118,7 +118,7 @@ void read() {
 }
 
 void grab() {
-  if (claw.read() > 0) {
+  if (claw.read() > 40) {
     claw.write(0);
   } else {
     claw.write(180);
@@ -243,6 +243,7 @@ void setup() {
   wrist1.attach(5);
   wrist1.write(90);
   wrist2.attach(4);
+  wrist2.write(90);
   claw.attach(3);
 }
 
